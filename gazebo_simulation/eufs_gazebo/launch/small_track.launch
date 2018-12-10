@@ -1,0 +1,97 @@
+<?xml version="1.0"?>
+<launch>
+
+  <!-- roslaunch arguments -->
+  <env name="GAZEBO_MODEL_PATH" value="$(find eufs_description)"/>
+  <env name="GAZEBO_RESOURCE_PATH" value="$(find eufs_description)"/>
+  <arg name="namespace" default="eufs"/>
+  <arg name="debug" default="false"/>
+  <arg name="gui" default="true"/>
+  <arg name="cmd_timeout" default="0.5"/>
+
+  <!-- Vehicle pose -->
+  <arg name="x" default="-15.0"/>
+  <arg name="y" default="14.4"/>
+  <arg name="z" default="0.1"/>
+  <arg name="roll" default="0.0"/>
+  <arg name="pitch" default="0.0"/>
+  <arg name="yaw" default="0.0"/>
+
+  <!-- Simulation parameters -->
+  <rosparam file="$(find eufs_gazebo)/config/simulation.yaml" command="load"/>
+
+  <!-- eufs_control launch file -->
+  <include file="$(find eufs_gazebo)/launch/eufs_control.launch"/>
+
+  <!-- Gazebo -->
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <arg name="world_name" value="$(find eufs_gazebo)/worlds/small_track.world"/>
+    <arg name="debug" value="$(arg debug)"/>
+    <arg name="gui" value="$(arg gui)"/>
+    <arg name="paused" value="false"/>
+    <arg name="use_sim_time" value="true"/>
+    <arg name="headless" value="false"/>
+  </include>
+
+  <!-- Load the URDF into the ROS Parameter Server -->
+  <param command="$(find xacro)/xacro '$(find eufs_description)/robots/ads-dv.urdf.xacro' --inorder" name="robot_description"/>
+
+  <!-- Call a python script to the run a service call to gazebo_ros to spawn a URDF robot -->
+  <node args="-urdf -model eufs -param robot_description
+    -x $(arg x) -y $(arg y) -z $(arg z) -R $(arg roll) -P $(arg pitch) -Y $(arg yaw)"
+    name="urdf_spawner" output="screen" pkg="gazebo_ros" respawn="false" type="spawn_model"/>
+
+  <!-- start robot_control node -->
+  <include file="$(find robot_control)/launch/robot_control.launch"/>
+
+  <!-- Python script to republish ground truth -->
+  <node name="ground_truth_republisher" pkg="eufs_gazebo" type="ground_truth_republisher.py" output="screen" />
+
+  <!-- Publish noised odometry -->
+  <node name="odometry_publisher" type="odometry_publisher.py" pkg="eufs_gazebo" ns="odom">
+    <remap from="input_odom" to="/robot_control/odom" />
+    <remap from="odom" to="/odom" />
+  </node>
+
+  <!-- FIXME: to move -->
+  <group ns="gps">
+    <!-- Conversion of GPS coordinates -->
+    <arg name="init_samples_number" value="5" />
+    <node name="set_gps_reference" type="set_gps_reference_node" pkg="geodetic_utils" args="$(arg init_samples_number)" output="screen">
+      <remap from="gps" to="fix" />
+    </node>
+
+    <node name="gps_to_pose_conversion" type="gps_to_pose_conversion_node" pkg="geodetic_utils" output="screen">
+      <remap from="gps" to="fix" />
+      <remap from="gps_position" to="position" />
+      <remap from="gps_pose" to="pose_empty" />
+    </node>
+
+    <!-- Publishing the GPS data in the good format -->
+    <node name="gps_publisher" type="gps_publisher.py" pkg="eufs_gazebo">
+      <remap from="gps_position" to="position" />
+      <remap from="gps_velocity" to="velocity" />
+      <remap from="gps_pose" to="pose" />
+      <remap from="gps_twist" to="twist" />
+    </node>
+  </group>
+
+  <group ns="perception">
+    <!-- Cones perception -->
+    <node name="cones_perception" type="cones_perception.py" pkg="eufs_gazebo" output="screen">
+      <remap from="gazebo_links" to="/gazebo/link_states" />
+    </node>
+
+    <!-- Rviz visualisation of perception -->
+    <node name="cones_detected_visualizer" type="cones_visualizer.py" pkg="rviz_visualizer">
+      <remap from="cones" to="cones_detected" />
+      <remap from="cone_markers" to="markers_cones_detected" />
+    </node>
+
+    <node name="cones_undetected_visualizer" type="cones_visualizer.py" pkg="rviz_visualizer">
+      <remap from="cones" to="cones_undetected" />
+      <remap from="cone_markers" to="markers_cones_undetected" />
+    </node>
+  </group>
+
+</launch>

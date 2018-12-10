@@ -1,0 +1,38 @@
+gps:
+  gps_publisher:
+    std_position: 10.0
+    std_velocity: 1.0
+    publish_frequency: 10
+
+odom:
+  odometry_publisher:
+    alpha_1: 0.3
+    alpha_2: 0.05
+    alpha_3: 0.5
+    alpha_4: 0.5
+    frame_id: "odom"
+    child_frame_id: "base_link"
+    input_frequency: 100
+    publish_frequency: 50
+
+perception:
+  cones_perception:
+    std_position: 0.03            # 0.03 for the velodyne
+    std_position_linear: 0.0      # 0.0 for the velodyne and the camera
+    std_position_quadratic: 0.0   # ? for the camera
+    range: 10.0
+    sensor_frame: 'velodyne'
+    publish_frequency: 10.0
+    display_undetected_cones: true
+
+  cones_detected_visualizer:
+    publish_frequency: 10.0
+    marker_scale: 0.5
+    marker_height: 0.2
+    namespace: 'gazebo_cones'
+
+  cones_undetected_visualizer:
+    publish_frequency: 10.0
+    marker_scale: 0.5
+    marker_height: 0.2
+    namespace: 'gazebo_cones'
