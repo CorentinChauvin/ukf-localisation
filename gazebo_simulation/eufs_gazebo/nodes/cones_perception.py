@@ -29,6 +29,7 @@ class ConesPerceptionNode():
         self.std_position_quadratic = rospy.get_param('~std_position_quadratic', 0.0)   # Quadratic factor in the standard deviation
         self.range = rospy.get_param('~range', 0.0)  # Range of the sensor
         self.sensor_frame = rospy.get_param('~sensor_frame', '')
+        self.absolute_frame = rospy.get_param('~absolute_frame', '')
         self.publish_frequency = rospy.get_param('~publish_frequency', 0.0)
         self.display_undetected_cones = rospy.get_param('~display_undetected_cones', False)
 
@@ -45,6 +46,7 @@ class ConesPerceptionNode():
 
         # ROS publishers
         self.cones_detected_publisher = rospy.Publisher('cones_detected', Cones, queue_size=1)
+        self.cones_detected_absolute_publisher = rospy.Publisher('cones_detected_absolute', Cones, queue_size=1)
         self.cones_undetected_publisher = rospy.Publisher('cones_undetected', Cones, queue_size=1)
 
         # ROS subscribers
@@ -64,6 +66,9 @@ class ConesPerceptionNode():
                 detected_cones = Cones()
                 detected_cones.header.stamp = rospy.get_rostime()
                 detected_cones.header.frame_id = self.sensor_frame
+                detected_cones_absolute = Cones()  # Real position of the detected cones in the absolute frame for data association
+                detected_cones.header.stamp = rospy.get_rostime()
+                detected_cones.header.frame_id = self.absolute_frame
                 undetected_cones = Cones()
                 undetected_cones.header.stamp = rospy.get_rostime()
                 undetected_cones.header.frame_id = self.sensor_frame
@@ -99,6 +104,9 @@ class ConesPerceptionNode():
 
                         detected_cones.cones.append(cone_transformed)
 
+                        # Add the initial cone in the absolute frame
+                        detected_cones_absolute.cones.append(cone)
+
                     elif self.display_undetected_cones:
                         cone_transformed.color = Cone.UNDEFINED
                         undetected_cones.cones.append(cone_transformed)
@@ -111,8 +119,9 @@ class ConesPerceptionNode():
                     car_pos.color = Cone.ORANGE
                     undetected_cones.cones.append(car_pos)
 
-                # Publish the detected cones
+                # Publish the cones
                 self.cones_detected_publisher.publish(detected_cones)
+                self.cones_detected_absolute_publisher.publish(detected_cones_absolute)
                 self.cones_undetected_publisher.publish(undetected_cones)
 
             self.rate.sleep()

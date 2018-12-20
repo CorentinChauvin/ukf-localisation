@@ -12,9 +12,13 @@ from random import gauss
 import roslib
 import rospy
 import tf
+import tf2_ros as tf2
+from std_msgs.msg import Header
+from geometry_msgs.msg import TransformStamped
 import dynamic_reconfigure.server
 from geometry_msgs.msg import Quaternion
 from nav_msgs.msg import Odometry
+from gazebo_msgs.msg import LinkStates
 from eufs_gazebo.cfg import odometryPublisherConfig
 
 
@@ -23,8 +27,9 @@ class OdometryPublisherNode():
         # ROS parameters
         self.frame_id = rospy.get_param('~frame_id', '')
         self.child_frame_id = rospy.get_param('~child_frame_id', '')
-        self.input_frequency = rospy.get_param('~input_frequency', 0.0)
         self.publish_frequency = rospy.get_param('~publish_frequency', 0.0)
+        self.publish_tf_gt = rospy.get_param('~publish_tf_gt', False)
+        self.publish_tf_noised = rospy.get_param('~publish_tf_noised', False)
 
         # Parameters for the noise model:
         # alpha_1: influence of the rotation on the rotation
@@ -36,8 +41,14 @@ class OdometryPublisherNode():
         self.alpha_3 = rospy.get_param('~alpha_3', 0.0)
         self.alpha_4 = rospy.get_param('~alpha_4', 0.0)
 
+        # TF initialisation
+        tf_broadcaster = tf2.TransformBroadcaster()
+
         # Init variables
-        self.last_odom = None
+        self.publish_delay = 1 / float(self.publish_frequency)
+        self.last_v_x = 0.0
+        self.last_v_y = 0.0
+        self.last_gazebo_odom = None
         self.last_noised_odom = None
         self.last_gt_odom = None    # Ground truth odom (the same than the input, but initially at 0)
 
@@ -46,7 +57,7 @@ class OdometryPublisherNode():
         self.ground_truth_publisher = rospy.Publisher('ground_truth', Odometry, queue_size=1)
 
         # ROS subscribers
-        rospy.Subscriber('input_odom', Odometry, self.odom_callback)
+        rospy.Subscriber('gazebo_links', LinkStates, self.gazebo_callback)
 
         # Dynamic reconfigure
         self.configServer = dynamic_reconfigure.server.Server(odometryPublisherConfig, self.dynamicReconfigure_callback)
@@ -59,43 +70,84 @@ class OdometryPublisherNode():
                 self.noised_publisher.publish(self.last_noised_odom)
                 self.ground_truth_publisher.publish(self.last_gt_odom)
 
+                if self.publish_tf_gt:
+                    # Publish ground truth tf transform frame_id->child_frame_id
+                    pose = self.last_gt_odom.pose.pose
+                    t = TransformStamped()
+
+                    t.header.stamp = rospy.Time.now()   # FIXME: standard function to convert pose to transform?
+                    t.header.frame_id = self.frame_id
+                    t.child_frame_id = self.child_frame_id
+                    t.transform.translation.x = pose.position.x
+                    t.transform.translation.y = pose.position.y
+                    t.transform.translation.z = 0.0
+                    t.transform.rotation.x = pose.orientation.x
+                    t.transform.rotation.y = pose.orientation.y
+                    t.transform.rotation.z = pose.orientation.z
+                    t.transform.rotation.w = pose.orientation.w
+
+                    tf_broadcaster.sendTransform(t)
+
+                elif self.publish_tf_noised:
+                    # Publish ground truth tf transform frame_id->child_frame_id
+                    pose = self.last_noised_odom.pose.pose
+                    t = TransformStamped()
+
+                    t.header.stamp = rospy.Time.now()   # FIXME: standard function to convert pose to transform?
+                    t.header.frame_id = self.frame_id
+                    t.child_frame_id = self.child_frame_id
+                    t.transform.translation.x = pose.position.x
+                    t.transform.translation.y = pose.position.y
+                    t.transform.translation.z = 0.0
+                    t.transform.rotation.x = pose.orientation.x
+                    t.transform.rotation.y = pose.orientation.y
+                    t.transform.rotation.z = pose.orientation.z
+                    t.transform.rotation.w = pose.orientation.w
+
+                    tf_broadcaster.sendTransform(t)
+
             self.rate.sleep()
 
 
-    def odom_callback(self, msg):
-        """ Callback for the odometry input messages
+    def gazebo_callback(self, msg):
+        """ Callback for the Gazebo links message
         """
 
-        if self.last_odom is not None:
-            odom = msg
+        # Filter the messages to lower the frequency (Gazebo publishes at 1000Hz)
+        if (self.last_noised_odom is not None
+            and (rospy.get_rostime()-self.last_noised_odom.header.stamp).to_sec() < self.publish_delay):
+            return
+
+        # Get the pose of the car from Gazebo and build an odom message
+        n = len(msg.name)
+        odom = None
+        for k in range(n):
+            if 'base_footprint' in msg.name[k]:
+                odom = Odometry()
+                odom.header.stamp = rospy.get_rostime()
+                odom.header.frame_id = self.frame_id
+                odom.child_frame_id = self.child_frame_id
+                odom.pose.pose = msg.pose[k]
+
+        if odom is None:
+            return
+
+        if self.last_gazebo_odom is not None:
             new_noised_odom = Odometry()
-            dt = 1.0 / self.input_frequency   # FIXME: the stamps published by Gazebo are not to be trusted
-            # dt = (odom.header.stamp - self.last_odom.header.stamp).to_sec()  # FIXME: be careful
+            dt = 1.0 / self.publish_frequency   # FIXME: the stamps published by Gazebo are not to be trusted
+            # dt = (odom.header.stamp - self.last_gazebo_odom.header.stamp).to_sec()  # FIXME: be careful
 
             # Compute deltas between last and current odoms
-            d_x = odom.pose.pose.position.x - self.last_odom.pose.pose.position.x
-            d_y = odom.pose.pose.position.y - self.last_odom.pose.pose.position.y
+            d_x = odom.pose.pose.position.x - self.last_gazebo_odom.pose.pose.position.x
+            d_y = odom.pose.pose.position.y - self.last_gazebo_odom.pose.pose.position.y
             d_d = sqrt(d_x**2 + d_y**2)  # linear distance travelled
 
-            last_theta = self.compute_angle_from_quaternion(self.last_odom.pose.pose.orientation)
+            last_theta = self.compute_angle_from_quaternion(self.last_gazebo_odom.pose.pose.orientation)
             theta = self.compute_angle_from_quaternion(odom.pose.pose.orientation)
             d_theta = theta - last_theta  # Care: it should be in [-pi, pi]
 
-            # Compute odometry model deltas
-            d_trans = abs(d_d)
-            d_rot1 = atan2(d_y, d_x) - last_theta
-            d_rot2 = d_theta - d_rot1
-
             # Prepare the ground truth odom message
-            d_x = d_trans * cos(theta + d_rot1)
-            d_y = d_trans * sin(theta + d_rot1)
-            d_theta = d_rot1 + d_rot2
-            self.last_gt_odom.pose.pose.position.x += d_x
-            self.last_gt_odom.pose.pose.position.y += d_y
-            self.last_gt_odom.pose.pose.orientation = self.compute_orientation_from_diff(
-                self.last_gt_odom.pose.pose.orientation,
-                d_theta
-            )
+            self.last_gt_odom.pose = odom.pose
 
             v_x = d_x / dt
             v_y = d_y / dt
@@ -114,8 +166,14 @@ class OdometryPublisherNode():
             self.last_gt_odom.header.frame_id = self.frame_id
             self.last_gt_odom.child_frame_id = odom.child_frame_id
 
+            # Compute odometry model deltas
+            d_trans = abs(d_d)
+            sign_v = copysign(1, v)
+            d_rot1 = theta + 0.5*(1-sign_v)*pi - last_theta  # don't use atan2(d_y, d_x) which is very noisy
+            d_rot2 = d_theta - d_rot1
+
             # Noise these deltas
-            if abs(d_trans) > 10**-5 or abs(d_theta) > 10**-5:
+            if abs(d_trans) > 5*10**-3 or abs(d_theta) > 5*10**-3:
                 d_rot1_mod = self.modulo_pi(d_rot1)  # prevent problems when going backwards
                 d_rot2_mod = self.modulo_pi(d_rot2)
 
@@ -135,6 +193,7 @@ class OdometryPublisherNode():
                         self.last_noised_odom.pose.pose.orientation
                         )
                     ))
+
             else:
                 noise_d_trans = 0.0
                 sigma_d_rot1 = 0.0
@@ -153,7 +212,7 @@ class OdometryPublisherNode():
                 d_theta
             )
 
-            new_noised_odom.header.stamp = msg.header.stamp
+            new_noised_odom.header.stamp = odom.header.stamp
             new_noised_odom.header.frame_id = self.frame_id
             new_noised_odom.child_frame_id = self.child_frame_id
 
@@ -187,15 +246,14 @@ class OdometryPublisherNode():
 
         else:
             # Initialise the odometries
-            self.last_noised_odom = Odometry()
-            self.last_noised_odom.header = msg.header
-            self.last_noised_odom.pose.pose.orientation = msg.pose.pose.orientation
+            header = Header()
+            header.stamp = rospy.get_rostime()
+            header.frame_id = self.frame_id
 
-            self.last_gt_odom = Odometry()
-            self.last_gt_odom.header = msg.header
-            self.last_gt_odom.pose.pose.orientation = msg.pose.pose.orientation
+            self.last_noised_odom = odom
+            self.last_gt_odom = odom
 
-        self.last_odom = msg
+        self.last_gazebo_odom = odom
 
 
     def compute_orientation_from_diff(self, last_orientation, d_theta):

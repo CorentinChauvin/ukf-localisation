@@ -74,12 +74,15 @@ Additional sensors for testing are avilable via the `ros-kinetic-robotnik-sensor
 ---
 
 ## TODO
+- Move the sensors in the Gazebo description model
 - Generate outliers for the perception (color and position)
 - Investigate delay of perception in Rviz
 - Remove display of car as a cone (in undetected cones) (?)
 - Move the *geodetic_utils* call in the SLAM package
 
 ## Changelog
+- 2018.12.14 (Corentin Chauvin-Hameau, corch@kth.se)
+  - Fix odometries (based on Gazebo instead of on the controllers)
 - 2018.12.08 (Corentin Chauvin-Hameau, corch@kth.se)
   - Noise odometry
 - 2018.12.07 (Corentin Chauvin-Hameau, corch@kth.se)

@@ -48,9 +48,9 @@
   <node name="ground_truth_republisher" pkg="eufs_gazebo" type="ground_truth_republisher.py" output="screen" />
 
   <!-- Publish noised odometry -->
-  <node name="odometry_publisher" type="odometry_publisher.py" pkg="eufs_gazebo" ns="odom">
-    <remap from="input_odom" to="/robot_control/odom" />
+  <node name="odometry_publisher" type="odometry_publisher.py" pkg="eufs_gazebo" ns="odom" output="screen">
     <remap from="odom" to="/odom" />
+    <remap from="gazebo_links" to="/gazebo/link_states" />
   </node>
 
   <!-- FIXME: to move -->
