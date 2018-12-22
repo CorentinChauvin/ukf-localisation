@@ -31,15 +31,22 @@ class ConesVisualizerNode():
             if self.last_cones is not None:
                 markers_msg = MarkerArray()
 
-                n = len(self.last_cones.cones)
+                last_cones = self.last_cones  # copy the cones to prevent from being modified by the callback meanwhile
+                n = len(last_cones.cones)
                 for k in range(n):
-                    cone = self.last_cones.cones[k]  # FIXME: sometimes, index out of range (?!)
+                    try:
+                        cone = last_cones.cones[k]  # FIXME: sometimes, index out of range (?!)
+                    except:
+                        rospy.logerr("--------------")
+                        rospy.logerr("k={}".format(k))
+                        rospy.logerr("n={}".format(n))
+                        rospy.logerr(last_cones)
                     marker = Marker()
 
                     marker.ns = namespace
                     marker.id = k
-                    marker.header.stamp = self.last_cones.header.stamp
-                    marker.header.frame_id = self.last_cones.header.frame_id
+                    marker.header.stamp = last_cones.header.stamp
+                    marker.header.frame_id = last_cones.header.frame_id
                     marker.type = Marker.CYLINDER
                     marker.action = Marker.ADD
 
