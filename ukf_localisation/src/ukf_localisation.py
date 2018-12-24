@@ -3,11 +3,10 @@
     ddf
 """
 
-from math import sqrt, sin, cos
+from math import sqrt, sin, cos, atan2
 import numpy as np
 from copy import deepcopy
-import scipy.linalg import sqrtm
-import roslib
+from scipy.linalg import sqrtm
 import rospy
 import tf
 import tf2_ros as tf2
@@ -26,9 +25,13 @@ class UKFNode():
         self.update_frequency = rospy.get_param('~update_frequency', 0.0)
         init_state = rospy.get_param('~init_state', [0.0]*6)
         init_covariance = rospy.get_param('~init_covariance', [0.0]*36)
+        process_noise_covariance = rospy.get_param('~process_noise_covariance', [0.0]*36)
         self.alpha = rospy.get_param('~alpha', 0.0)
+        self.beta = rospy.get_param('~beta', 0.0)
         self.gamma = rospy.get_param('~gamma', 0.0)
         self.omega_decay = rospy.get_param('~omega_decay', 0.0)  # decay parameter for the imu angular speed update
+        self.frame_id = rospy.get_param('~frame_id', '')
+        self.child_frame_id = rospy.get_param('~child_frame_id', '')
 
         # Init variables
         self.odometry_available = False
@@ -44,13 +47,14 @@ class UKFNode():
         self.last_cones_msg = None
 
         self.dt = 1/float(self.update_frequency)
+        self.min_cov_value = 10.0**-9  # minimal diagonal covariance value
 
         # Initialise tf2
         self.tf_buffer = tf2.Buffer()
         self.tf_listener = tf2.TransformListener(self.tf_buffer)
 
         # ROS publishers
-        self.cones_detected_publisher = rospy.Publisher('cones_detected', Cones, queue_size=1)
+        self.output_publisher = rospy.Publisher('output', Odometry, queue_size=1)
 
         # ROS subscribers
         rospy.Subscriber('odom', Odometry, self.odometry_callback)
@@ -65,63 +69,80 @@ class UKFNode():
         # UKF initialisation
         self.mu = np.array(init_state)
         self.n = len(self.mu)
+
         self.covariance = np.array(init_covariance).reshape(self.n, self.n)
-        self.lambda = self.alpha**2 * (self.n + self.gamma)
-        self.eta = sqrt(self.n + self.lambda)
-        self.Q = 0 # TODO
+        self.ko = self.alpha**2 * (self.n + self.gamma)
+        self.eta = sqrt(self.n + self.ko)
+        self.Q = np.array(process_noise_covariance).reshape(self.n, self.n)
         # self.map = # TODO for data association
 
         # UKF weights
         self.w_m = [0.0]*(2*self.n+1)
         self.w_c = [0.0]*(2*self.n+1)
-        self.w_m[0] = self.lambda/(self.n+self.lambda)
+        self.w_m[0] = self.ko/(self.n+self.ko)
         self.w_c[0] = self.w_m[0] + (1 - self.alpha**2 + self.beta)
         for i in range(1, 2*self.n+1):
-            self.w_m[i] = 1 / (2*(self.n+self.lambda))
+            self.w_m[i] = 1 / (2*(self.n+self.ko))
             self.w_c[i] = self.w_m[i]
 
+        np.set_printoptions(precision=2, suppress=True)  # TODO: remove
 
         # Main loop
-        self.rate = rospy.Rate(self.publish_frequency)
+        self.rate = rospy.Rate(self.update_frequency)
         while not rospy.is_shutdown():
             # Time update
             sigma_points = [self.mu]
-            for i in range(n):
-                matrix_squareroot = self.eta * sqrtm(self.covariance)
-                sigma_points.append(self.mu + matrix_squareroot)
-                sigma_points.append(self.mu - matrix_squareroot)
+            matrix_squareroot = self.eta * sqrtm(self.covariance)
+            print("covariance: \n{}".format(self.covariance))
+            # print("matrix_squareroot: \n{}".format(matrix_squareroot))
+            for i in range(self.n):
+                sigma_points.append(self.mu + matrix_squareroot[i, :])
+                sigma_points.append(self.mu - matrix_squareroot[i, :])
 
-            sigma_points = predict(sigma_points)
+            sigma_points = self.predict(sigma_points)
 
-            self.w_mu = np.array([0.0]*self.n)
+            mu = np.array([0.0]*self.n)
             for i in range(2*self.n+1):
-                neself.w_mu += self.w_m[i] * mu[i]
-            self.mu = deepcopy(neself.w_mu)  # FIXME: be careful with the copy
+                # print("sigma_points[{}] :{}".format(i, sigma_points[i]))
+                mu += self.w_m[i] * sigma_points[i]
+            self.mu = deepcopy(mu)  # FIXME: be careful with the copy
 
-            self.covariance = np.array([0.0]*(self.n**2)).reshape(self.n, self.n)
-            for i in range(2*n+1):
-                self.covariance += self.w_c[i]*(sigma_points[i]-self.mu[i])*(sigma_points[i]-self.mu[i]).transpose() + self.Q
+            # self.covariance = np.array([0.0]*(self.n**2)).reshape(self.n, self.n)
+            self.covariance = self.Q
+            for i in range(2*self.n+1):
+                self.covariance += self.w_c[i] * np.matmul(
+                                                        sigma_points[i]-self.mu,
+                                                        (sigma_points[i]-self.mu).transpose()
+                                                        )
 
             # Measurement update
             if self.odometry_available:
                 [Z, z, R] = self.odometry_model(sigma_points)
                 self.measurement_update(Z, z, R, sigma_points)
                 self.odometry_available = False
+                print("Odometry update")
 
             if self.gnss_pose_available:
                 [Z, z, R] = self.gnss_pose_model(sigma_points)
                 self.measurement_update(Z, z, R, sigma_points)
                 self.gnss_pose_available = False
+                print("Gnss pose update")
 
             if self.gnss_twist_available:
                 [Z, z, R] = self.gnss_twist_model(sigma_points)
                 self.measurement_update(Z, z, R, sigma_points)
                 self.gnss_twist_available = False
+                print("Gnss twist update")
 
             if self.cones_available:
                 [Z, z, R] = self.cones_model(sigma_points)
                 self.measurement_update(Z, z, R, sigma_points)
                 self.cones_available = False
+                print("Cones update")
+
+            # Publish odometry output
+            self.publish_output()
+
 
 
     def predict(self, sigma_points):
@@ -134,7 +155,7 @@ class UKFNode():
         """
 
         if self.last_imu_msg is None:
-            return
+            return sigma_points
 
         omega_imu = self.last_imu_msg.angular_velocity.z
         a_x = self.last_imu_msg.linear_acceleration.x
@@ -176,17 +197,21 @@ class UKFNode():
 
         S = R
         for i in range(2*self.n+1):
-            S += w_c[i] * (Z[i]-z_hat) * ((Z[i]-z_hat).transpose())
+            diff = np.matrix(Z[i]-z_hat).transpose()  # column vector
+            S += self.w_c[i] * np.matmul(diff, diff.transpose())
 
         self.covariance = np.array([0.0]*(self.n**2)).reshape(self.n, self.n)
         for i in range(2*self.n+1):
-            self.covariance += self.w_i[i] * (sigma_points[i]-self.mu) * ((Z[i]-z_hat).transpose())
+            self.covariance += self.w_c[i] * np.matmul(
+                                                    sigma_points[i]-self.mu,
+                                                    np.matrix(Z[i]-z_hat).transpose()
+                                                    )
 
-        K = self.covariance * np.linealg.inv(S)
+        K = self.covariance * np.linalg.inv(S)
 
         # Updating the estimate
-        self.mu += K*(z-z_hat)
-        self.covariance -= K*S*(K.transpose())
+        self.mu += np.dot(K, z-z_hat)
+        self.covariance -= K.dot(S).dot(K.transpose())
 
 
     def odometry_model(self, sigma_points):
@@ -204,9 +229,9 @@ class UKFNode():
         Z = [0.0]*(2*self.n+1)
         for i in range(2*self.n+1):
             Z[i] = np.array([0.0, 0.0, 0.0,
-                             sigma_points[i][4],
+                             sigma_points[i][3],
                              0.0,
-                             sigma_points[i][6]])
+                             sigma_points[i][5]])
 
         # Provide real measurement
         z = np.array([0.0, 0.0, 0.0,
@@ -215,9 +240,9 @@ class UKFNode():
                       self.last_odom_msg.twist.twist.angular.z])
 
         # Build the measurement noise matrix
-        R = np.array([0.0]*(self.n**2)).reshape(self.n, self.n)
-        R[3][3] = self.last_odom_msg.twist.covariance[0]
-        R[5][5] = self.last_odom_msg.twist.covariance[35]
+        R = self.initialise_cov_matrix(self.n, self.min_cov_value)
+        R[3][3] = max(self.last_odom_msg.twist.covariance[0], self.min_cov_value)
+        R[5][5] = max(self.last_odom_msg.twist.covariance[35], self.min_cov_value)
 
         return [Z, z, R]
 
@@ -245,9 +270,9 @@ class UKFNode():
                       0.0, 0.0, 0.0, 0.0])
 
         # Build the measurement noise matrix
-        R = np.array([0.0]*(self.n**2)).reshape(self.n, self.n)
-        R[0][0] = self.last_gnss_pose_msg.pose.covariance[0]
-        R[1][1] = self.last_gnss_pose_msg.pose.covariance[7]
+        R = self.initialise_cov_matrix(self.n, self.min_cov_value)
+        R[0][0] = max(self.last_gnss_pose_msg.pose.covariance[0], self.min_cov_value)
+        R[1][1] = max(self.last_gnss_pose_msg.pose.covariance[7], self.min_cov_value)
 
         return [Z, z, R]
 
@@ -277,10 +302,10 @@ class UKFNode():
         # Build the measurement noise matrix
         sigma_v_x = sqrt(self.last_gnss_twist_msg.twist.covariance[0])
         sigma_v_y = sqrt(self.last_gnss_twist_msg.twist.covariance[7])
-        R = np.array([0.0]*(self.n**2)).reshape(self.n, self.n)
-        R[2][2] = (v_x*sigma_v_y)**2 + (v_y*sigma_v_x)**2)) / (v_x**2 + v_y**2)
-        R[3][3] = sigma_v_x**2
-        R[4][4] = sigma_v_y**2
+        R = self.initialise_cov_matrix(self.n, self.min_cov_value)
+        R[2][2] = max(((v_x*sigma_v_y)**2 + (v_y*sigma_v_x)**2) / (v_x**2 + v_y**2), self.min_cov_value)
+        R[3][3] = max(sigma_v_x**2, self.min_cov_value)
+        R[4][4] = max(sigma_v_y**2, self.min_cov_value)
 
         return [Z, z, R]
 
@@ -310,11 +335,56 @@ class UKFNode():
         self.cones_available = True
 
 
+    def publish_output(self):
+        """ Build odometry output and publish it
+        """
+
+        msg = Odometry()
+        msg.header.stamp = rospy.get_rostime()
+        msg.header.frame_id = self.frame_id
+        msg.child_frame_id = self.child_frame_id
+
+        msg.pose.pose.position.x = self.mu[0]
+        msg.pose.pose.position.y = self.mu[1]
+
+        quaternion = tf.transformations.quaternion_from_euler(0.0, 0.0, self.mu[2])
+        msg.pose.pose.orientation.x = quaternion[0]
+        msg.pose.pose.orientation.y = quaternion[1]
+        msg.pose.pose.orientation.z = quaternion[2]
+        msg.pose.pose.orientation.w = quaternion[3]
+
+        msg.pose.covariance[0] = self.covariance[0][0]
+        msg.pose.covariance[7] = self.covariance[1][1]
+        msg.pose.covariance[35] = self.covariance[2][2]
+
+        msg.twist.twist.linear.x = self.mu[3]
+        msg.twist.twist.linear.y = self.mu[4]
+        msg.twist.twist.angular.z = self.mu[5]
+
+        msg.twist.covariance[0] = self.covariance[3][3]
+        msg.twist.covariance[7] = self.covariance[4][4]
+        msg.twist.covariance[35] = self.covariance[5][5]
 
 
+        print("-----*--*-*-*")
+        self.output_publisher.publish(msg)
 
 
+    def initialise_cov_matrix(self, n, diag_value):
+        """ Create a n by n covariance matrix
 
+            Arguments:
+                - n: dimension of the covariance matrix
+                - diag_value: diagonal terms
+            Returns:
+                - a n by n numpy array
+        """
+
+        M = np.array([0.0]*(n**2)).reshape(n, n)
+        for k in range(n):
+            M[k][k] = diag_value
+
+        return M
 
 
     # def dynamicReconfigure_callback(self, config, level):

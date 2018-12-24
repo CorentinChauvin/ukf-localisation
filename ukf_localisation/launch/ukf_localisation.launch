@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<launch>
+  <rosparam file="$(find ukf_localisation)/config/ukf.yaml" command="load"/>
+
+  <node name="ukf_localisation" type="ukf_localisation.py" pkg="ukf_localisation" output="screen">
+    <remap from="odom" to="/odom/noised" />
+    <remap from="imu" to="/imu" />
+    <remap from="gnss_pose" to="/gps/pose" />
+    <remap from="gnss_twist" to="/gps/twist" />
+    <remap from="cones" to="/perception/detected" />
+  </node>
+</launch>

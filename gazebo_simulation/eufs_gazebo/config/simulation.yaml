@@ -1,7 +1,7 @@
 gps:
   gps_publisher:
-    std_position: 10.0
-    std_velocity: 1.0
+    std_position: 2.5
+    std_velocity: 0.05
     publish_frequency: 10
 
 odom:
