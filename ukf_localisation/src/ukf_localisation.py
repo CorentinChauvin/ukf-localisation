@@ -71,7 +71,7 @@ class UKFNode():
         self.n = len(self.mu)
 
         self.covariance = np.array(init_covariance).reshape(self.n, self.n)
-        self.ko = self.alpha**2 * (self.n + self.gamma)
+        self.ko = self.alpha**2 * (self.n + self.gamma) - self.n
         self.eta = sqrt(self.n + self.ko)
         self.Q = np.array(process_noise_covariance).reshape(self.n, self.n)
         # self.map = # TODO for data association
@@ -85,64 +85,54 @@ class UKFNode():
             self.w_m[i] = 1 / (2*(self.n+self.ko))
             self.w_c[i] = self.w_m[i]
 
-        np.set_printoptions(precision=2, suppress=True)  # TODO: remove
 
         # Main loop
-        self.rate = rospy.Rate(self.update_frequency)
+        rate = rospy.Rate(self.update_frequency)
         while not rospy.is_shutdown():
             # Time update
             sigma_points = [self.mu]
             matrix_squareroot = self.eta * sqrtm(self.covariance)
-            print("covariance: \n{}".format(self.covariance))
-            # print("matrix_squareroot: \n{}".format(matrix_squareroot))
             for i in range(self.n):
                 sigma_points.append(self.mu + matrix_squareroot[i, :])
                 sigma_points.append(self.mu - matrix_squareroot[i, :])
 
-            sigma_points = self.predict(sigma_points)
+            sigma_points = deepcopy(self.predict(sigma_points))
 
             mu = np.array([0.0]*self.n)
             for i in range(2*self.n+1):
-                # print("sigma_points[{}] :{}".format(i, sigma_points[i]))
                 mu += self.w_m[i] * sigma_points[i]
-            self.mu = deepcopy(mu)  # FIXME: be careful with the copy
+            self.mu = deepcopy(mu)
 
-            # self.covariance = np.array([0.0]*(self.n**2)).reshape(self.n, self.n)
-            self.covariance = self.Q
+            self.covariance = deepcopy(self.Q)
             for i in range(2*self.n+1):
-                self.covariance += self.w_c[i] * np.matmul(
-                                                        sigma_points[i]-self.mu,
-                                                        (sigma_points[i]-self.mu).transpose()
-                                                        )
+                diff = np.matrix(sigma_points[i]-self.mu).transpose()  # column vector
+                self.covariance += self.w_c[i] * np.matmul(diff, diff.transpose())
 
             # Measurement update
             if self.odometry_available:
                 [Z, z, R] = self.odometry_model(sigma_points)
                 self.measurement_update(Z, z, R, sigma_points)
                 self.odometry_available = False
-                print("Odometry update")
 
             if self.gnss_pose_available:
                 [Z, z, R] = self.gnss_pose_model(sigma_points)
                 self.measurement_update(Z, z, R, sigma_points)
                 self.gnss_pose_available = False
-                print("Gnss pose update")
 
             if self.gnss_twist_available:
                 [Z, z, R] = self.gnss_twist_model(sigma_points)
                 self.measurement_update(Z, z, R, sigma_points)
                 self.gnss_twist_available = False
-                print("Gnss twist update")
 
             if self.cones_available:
                 [Z, z, R] = self.cones_model(sigma_points)
                 self.measurement_update(Z, z, R, sigma_points)
                 self.cones_available = False
-                print("Cones update")
 
             # Publish odometry output
             self.publish_output()
 
+            rate.sleep()
 
 
     def predict(self, sigma_points):
@@ -161,7 +151,7 @@ class UKFNode():
         a_x = self.last_imu_msg.linear_acceleration.x
         a_y = self.last_imu_msg.linear_acceleration.y
 
-        for i in range(self.n):
+        for i in range(2*self.n+1):
             x = sigma_points[i][0]
             y = sigma_points[i][1]
             theta = sigma_points[i][2]
@@ -365,8 +355,6 @@ class UKFNode():
         msg.twist.covariance[7] = self.covariance[4][4]
         msg.twist.covariance[35] = self.covariance[5][5]
 
-
-        print("-----*--*-*-*")
         self.output_publisher.publish(msg)
 
 
@@ -385,6 +373,15 @@ class UKFNode():
             M[k][k] = diag_value
 
         return M
+
+
+    def print_sigma_points(self, sigma_points):
+        """ Print the provided sigma points
+        """
+
+        n = len(sigma_points)
+        for i in range(n):
+            print("sigma_points[{}]: {}".format(i, sigma_points[i]))
 
 
     # def dynamicReconfigure_callback(self, config, level):
