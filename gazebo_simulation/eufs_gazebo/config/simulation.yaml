@@ -6,10 +6,10 @@ gps:
 
 odom:
   odometry_publisher:
-    alpha_1: 1.1    # influence of the rotation on the rotation
-    alpha_2: 0.03   # influence of the translation on the rotation
-    alpha_3: 0.4    # influence of the translation on the translation
-    alpha_4: 0.4    # influence of the rotation on the translation
+    alpha_1: 0.003    # influence of the rotation on the rotation
+    alpha_2: 0.002   # influence of the translation on the rotation
+    alpha_3: 0.02    # influence of the translation on the translation
+    alpha_4: 0.0003    # influence of the rotation on the translation
 
     frame_id: "odom"
     child_frame_id: "base_footprint"

@@ -15,25 +15,25 @@
     </gazebo>
 	</xacro:macro>
 
-  <gazebo>	
+  <gazebo>
     <plugin name="p3d_base_controller" filename="libgazebo_ros_p3d.so">
         <alwaysOn>true</alwaysOn>
-        <updateRate>200.0</updateRate>
+        <updateRate>50.0</updateRate>
         <bodyName>odom_ground_truth</bodyName>
-        <topicName>ground_truth/state_raw</topicName>
-        <gaussianNoise>0.00</gaussianNoise>
+        <topicName>/gazebo/odom</topicName>
+        <gaussianNoise>0.0</gaussianNoise>
         <frameName>world</frameName>
         <!-- origin is at spawn location -->
-        <xyzOffset>43.0 -40 0</xyzOffset>
+        <xyzOffset>0 0 0</xyzOffset>
         <rpyOffset>0 0 0</rpyOffset>
     </plugin>
   </gazebo>
-	
+
   <!-- No Ackermann steering plugin -->
-	  
+
   <gazebo reference="base_footprint">
     <material>Gazebo/Green</material>
   </gazebo>
-  
+
 
 </robot>

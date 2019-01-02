@@ -39,6 +39,7 @@ catkin build
 - To control the car: `roslaunch robot_control keyboard_robot_control.launch`
 
 ## TODO
+- Investigate offsets in noised odometry position
 - Disable each measurement update through dynamic reconfigure
 - Investigate why odometry update updates pose
 
