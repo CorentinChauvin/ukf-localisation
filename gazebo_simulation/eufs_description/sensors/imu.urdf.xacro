@@ -43,7 +43,7 @@
 				<accelOffset>0.0 0.0 0.0</accelOffset>
         <accelDrift>0.0 0.0 0.0</accelDrift>
 				<accelDriftFrequency>1.0 1.0 1.0</accelDriftFrequency>
-        <accelGaussianNoise>0.011 0.011 0.3</accelGaussianNoise>
+        <accelGaussianNoise>0.011 0.011 0.0</accelGaussianNoise>
 
 				<rateOffset>0.0 0.0 0.0</rateOffset>
 				<rateDrift>0.0 0.0 0.0</rateDrift>

@@ -17,6 +17,10 @@ odom:
     publish_tf_gt: true
     publish_tf_noised: false
 
+center_imu:
+  wait_time: 3.5
+  averaging_time: 3.0
+
 perception:
   cones_perception:
     std_position: 0.03            # 0.03 for the velodyne
