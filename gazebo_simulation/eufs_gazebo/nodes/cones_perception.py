@@ -31,7 +31,8 @@ class ConesPerceptionNode():
         self.sensor_frame = rospy.get_param('~sensor_frame', '')
         self.absolute_frame = rospy.get_param('~absolute_frame', '')
         self.publish_frequency = rospy.get_param('~publish_frequency', 0.0)
-        self.display_undetected_cones = rospy.get_param('~display_undetected_cones', False)
+        self.publish_undetected_cones = rospy.get_param('~publish_undetected_cones', False)
+        self.publish_sensor = rospy.get_param('~publish_sensor', False)
 
         # Init variables
         self.cones_list = []    # List of all the cones on the map
@@ -68,7 +69,7 @@ class ConesPerceptionNode():
                 detected_cones.header.frame_id = self.sensor_frame
                 detected_cones_absolute = Cones()  # Real position of the detected cones in the absolute frame for data association
                 detected_cones.header.stamp = rospy.get_rostime()
-                detected_cones.header.frame_id = self.absolute_frame
+                detected_cones.header.frame_id = self.sensor_frame
                 undetected_cones = Cones()
                 undetected_cones.header.stamp = rospy.get_rostime()
                 undetected_cones.header.frame_id = self.sensor_frame
@@ -107,12 +108,12 @@ class ConesPerceptionNode():
                         # Add the initial cone in the absolute frame
                         detected_cones_absolute.cones.append(cone)
 
-                    elif self.display_undetected_cones:
+                    elif self.publish_undetected_cones:
                         cone_transformed.color = Cone.UNDEFINED
                         undetected_cones.cones.append(cone_transformed)
 
-                # Display the position of the car as a cone (FIXME: to remove?)
-                if self.display_undetected_cones:
+                # publish the position of the car as a cone
+                if self.publish_undetected_cones and self.publish_sensor:
                     car_pos = Cone()
                     car_pos.x = 0.0
                     car_pos.y = 0.0
@@ -211,7 +212,8 @@ class ConesPerceptionNode():
         self.range = config['range']
         self.range_squared = self.range**2
         self.publish_frequency = config['publish_frequency']
-        self.display_undetected_cones = config['display_undetected_cones']
+        self.publish_undetected_cones = config['publish_undetected_cones']
+        self.publish_sensor = config['publish_sensor']
 
         self.rate = rospy.Rate(self.publish_frequency)
 

@@ -23,10 +23,11 @@ perception:
     std_position_linear: 0.0      # 0.0 for the velodyne and the camera
     std_position_quadratic: 0.0   # ? for the camera
     range: 10.0
-    absolute_frame: 'world'
+    absolute_frame: 'world'  # FIXME: not used anymore
     sensor_frame: 'velodyne'
     publish_frequency: 10.0
-    display_undetected_cones: true
+    publish_undetected_cones: true
+    publish_sensor: false
 
   cones_detected_visualizer:
     publish_frequency: 10.0
