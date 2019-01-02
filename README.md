@@ -39,7 +39,11 @@ catkin build
 - To control the car: `roslaunch robot_control keyboard_robot_control.launch`
 
 ## TODO
+- Disable each measurement update through dynamic reconfigure
+- Investigate why odometry update updates pose
 
 ## Changelog
+- 2018.12.27:
+  - UKF prediction phase working
 - 2018.12.10:
   - Add working Gazebo simulation

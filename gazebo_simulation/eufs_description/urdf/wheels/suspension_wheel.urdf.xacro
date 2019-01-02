@@ -20,8 +20,10 @@
   <xacro:property name="wheelbase" value="1.60"/>
   <xacro:property name="hex_hub_dist" value="1.1"/>  <!-- track/width of the car -->
   <xacro:property name="axle_length" value="0.120"/>
-  <xacro:property name="wheel_travel" value="0.05"/>
-  <xacro:property name="shock_z_offset" value="0.05"/>
+  <xacro:property name="wheel_travel" value="0.0"/>
+  <!-- <xacro:property name="wheel_travel" value="0.05"/> -->
+  <xacro:property name="shock_z_offset" value="0.0"/>
+  <!-- <xacro:property name="shock_z_offset" value="0.05"/> -->
 
   <!-- Degree-to-radian conversions -->
   <xacro:property name="degrees_45" value="0.785398163"/>
@@ -29,8 +31,8 @@
   <xacro:property name="degrees_180" value="3.14159265"/>
 
   <!-- shock_eff_limit is 2 * ((shock_stroke / 2) * shock_spring_constant) N. -->
-  <xacro:property name="shock_eff_limit" value="50"/>
-  <xacro:property name="shock_vel_limit" value="500"/>
+  <xacro:property name="shock_eff_limit" value="500"/>
+  <xacro:property name="shock_vel_limit" value="5000"/>
 
   <xacro:property name="wheel_joint_damping" value="0.01" />
   <xacro:property name="wheel_joint_friction" value="0.1" />

@@ -29,32 +29,26 @@
 		</link>
 
 		<gazebo>
-			<plugin filename="libgazebo_ros_imu.so" name="${prefix}_controller">
+			<plugin filename="libhector_gazebo_ros_imu.so" name="imu_plugin">
 				<alwaysOn>true</alwaysOn>
-	      <bodyName>${prefix}_base_link</bodyName>
-	      <frameName>${prefix}_base_link</frameName>
-	      <topicName>${prefix}</topicName>
-	      <serviceName>${prefix}_service</serviceName>
-	      <gaussianNoise>0.01</gaussianNoise>
-	      <updateRate>100.0</updateRate>
-	      <imu>
-	        <noise>
-	          <type>gaussian</type>
-	          <rate>
-	            <mean>0.0</mean>
-	            <stddev>0.0</stddev>
-	            <stddev>2e-4</stddev>
-	            <bias_mean>0.0000075</bias_mean>
-	            <bias_stddev>0.0000008</bias_stddev>
-	          </rate>
-	          <accel>
-	            <mean>0.0</mean>
-	            <stddev>1.1e-2</stddev>
-	            <bias_mean>0.01</bias_mean>
-	            <bias_stddev>0.001</bias_stddev>
-	          </accel>
-	        </noise>
-	      </imu>
+        <updateRate>100.0</updateRate>
+        <bodyName>${prefix}_base_link</bodyName>
+        <frameId>${prefix}_base_link</frameId>
+				<topicName>${prefix}</topicName>
+				<serviceName>${prefix}/calibrate</serviceName>
+
+        <rpyOffsets>0 0 0</rpyOffsets> 		<!-- deprecated -->
+        <gaussianNoise>0</gaussianNoise>  <!-- deprecated -->
+
+				<accelOffset>0.0 0.0 0.0</accelOffset>
+        <accelDrift>0.0 0.0 0.0</accelDrift>
+				<accelDriftFrequency>1.0 1.0 1.0</accelDriftFrequency>
+        <accelGaussianNoise>0.011 0.011 0.3</accelGaussianNoise>
+
+				<rateOffset>0.0 0.0 0.0</rateOffset>
+				<rateDrift>0.0 0.0 0.0</rateDrift>
+				<rateDriftFrequency>1.0 1.0 1.0</rateDriftFrequency>
+				<rateGaussianNoise>0.0 0.0 0.002</rateGaussianNoise>
 			</plugin>
 		</gazebo>
 	</xacro:macro>
