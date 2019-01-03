@@ -2,11 +2,20 @@
 <launch>
   <rosparam file="$(find ukf_localisation)/config/ukf.yaml" command="load"/>
 
-  <node name="ukf_localisation" type="ukf_localisation.py" pkg="ukf_localisation" output="screen">
-    <remap from="odom" to="/odom/noised" />
-    <remap from="imu" to="/imu" />
-    <remap from="gnss_pose" to="/gps/pose" />
-    <remap from="gnss_twist" to="/gps/twist" />
-    <remap from="cones" to="/perception/detected" />
-  </node>
+  <group ns="ukf">
+    <node name="ukf_localisation" type="ukf_localisation.py" pkg="ukf_localisation" output="screen" launch-prefix="$(find ukf_localisation)/launch/reset_odom.sh">
+      <remap from="odom" to="/odom/noised" />
+      <remap from="imu" to="/imu_centered" />
+      <remap from="gnss_pose" to="/gps/pose" />
+      <remap from="gnss_twist" to="/gps/twist" />
+      <remap from="cones" to="/perception/detected" />
+      <remap from="init_topic" to="/odom/ground_truth" />
+    </node>
+
+    <node name="diff_odom_publisher" type="diff_odom_publisher.py" pkg="ukf_localisation" output="screen">
+      <remap from="odom1" to="/odom/ground_truth" />
+      <remap from="odom2" to="/ukf/output" />
+      <remap from="diff_odom" to="/ukf/diff" />
+    </node>
+  </group>
 </launch>

@@ -1,24 +1,32 @@
-ukf_localisation:
-  update_frequency: 10.0
-  frame_id: 'world'
-  child_frame_id: 'base_footprint'
+ukf:
+  ukf_localisation:
+    update_frequency: 10.0
+    frame_id: 'odom'
+    child_frame_id: 'base_footprint'
 
-  alpha: 0.1
-  beta: 2.0
-  gamma: 0.0
-  omega_decay: 0.0
+    alpha: 0.1
+    beta: 2.0
+    gamma: 0.0
+    omega_decay: 0.8  # 0.0: only IMU ; 1.0: only odometry
 
-  # State: x, y, theta, v_x, v_y, omega
-  init_state: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-  init_covariance: [0.1, 0.0, 0.0, 0.0, 0.0, 0.0,
-                    0.0, 0.1, 0.0, 0.0, 0.0, 0.0,
-                    0.0, 0.0, 0.1, 0.0, 0.0, 0.0,
-                    0.0, 0.0, 0.0, 0.1, 0.0, 0.0,
-                    0.0, 0.0, 0.0, 0.0, 0.1, 0.0,
-                    0.0, 0.0, 0.0, 0.0, 0.0, 0.1]
-  process_noise_covariance: [0.001, 0.0, 0.0, 0.0, 0.0, 0.0,
-                             0.0, 0.001, 0.0, 0.0, 0.0, 0.0,
-                             0.0, 0.0, 0.001, 0.0, 0.0, 0.0,
-                             0.0, 0.0, 0.0, 0.001, 0.0, 0.0,
-                             0.0, 0.0, 0.0, 0.0, 0.001, 0.0,
-                             0.0, 0.0, 0.0, 0.0, 0.0, 0.001]
+    # State: x, y, theta, v_x, v_y, omega
+    init_state: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    init_covariance: [0.1, 0.0, 0.0, 0.0, 0.0, 0.0,
+                      0.0, 0.1, 0.0, 0.0, 0.0, 0.0,
+                      0.0, 0.0, 0.1, 0.0, 0.0, 0.0,
+                      0.0, 0.0, 0.0, 0.1, 0.0, 0.0,
+                      0.0, 0.0, 0.0, 0.0, 0.1, 0.0,
+                      0.0, 0.0, 0.0, 0.0, 0.0, 0.1]
+    process_noise_covariance: [0.001, 0.0, 0.0, 0.0, 0.0, 0.0,
+                               0.0, 0.001, 0.0, 0.0, 0.0, 0.0,
+                               0.0, 0.0, 0.001, 0.0, 0.0, 0.0,
+                               0.0, 0.0, 0.0, 0.001, 0.0, 0.0,
+                               0.0, 0.0, 0.0, 0.0, 0.001, 0.0,
+                               0.0, 0.0, 0.0, 0.0, 0.0, 0.001]
+    init_with_topic: true
+
+  diff_odom_publisher:
+    publish_frequency: 10.0
+    frame_id: 'odom'
+    child_frame_id: 'base_footprint'
+    verbose: false

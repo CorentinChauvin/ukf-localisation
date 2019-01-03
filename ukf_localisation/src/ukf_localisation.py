@@ -32,6 +32,7 @@ class UKFNode():
         self.omega_decay = rospy.get_param('~omega_decay', 0.0)  # decay parameter for the imu angular speed update
         self.frame_id = rospy.get_param('~frame_id', '')
         self.child_frame_id = rospy.get_param('~child_frame_id', '')
+        init_with_topic = rospy.get_param('~init_with_topic', False)
 
         # Init variables
         self.odometry_available = False
@@ -47,7 +48,7 @@ class UKFNode():
         self.last_cones_msg = None
 
         self.dt = 1/float(self.update_frequency)
-        self.min_cov_value = 10.0**-9  # minimal diagonal covariance value
+        self.min_cov_value = 10.0**-15  # minimal diagonal covariance value
 
         # Initialise tf2
         self.tf_buffer = tf2.Buffer()
@@ -62,12 +63,21 @@ class UKFNode():
         rospy.Subscriber('gnss_pose', PoseWithCovarianceStamped, self.gnss_pose_callback)
         rospy.Subscriber('gnss_twist', TwistWithCovarianceStamped, self.gnss_twist_callback)
         rospy.Subscriber('cones', Cones, self.cones_callback)
+        if init_with_topic:
+            self.mu = None
+            self.sub_init_topic = rospy.Subscriber('init_topic', Odometry, self.init_topic_callback)
 
         # Dynamic reconfigure
         # self.configServer = dynamic_reconfigure.server.Server(conesPerceptionConfig, self.dynamicReconfigure_callback)  # TODO
 
         # UKF initialisation
-        self.mu = np.array(init_state)
+        if init_with_topic:
+            rospy.logdebug("Waiting for initialisation...")
+            while self.mu is None:
+                rospy.Rate(5).sleep()
+            rospy.logdebug("mu initialised: {}".format(self.mu))
+        else:
+            self.mu = np.array(init_state)
         self.n = len(self.mu)
 
         self.covariance = np.array(init_covariance).reshape(self.n, self.n)
@@ -85,8 +95,10 @@ class UKFNode():
             self.w_m[i] = 1 / (2*(self.n+self.ko))
             self.w_c[i] = self.w_m[i]
 
+        np.set_printoptions(precision=4, suppress=True)  # TODO: remove
 
-        # Main loop
+
+        # MAIN LOOP
         rate = rospy.Rate(self.update_frequency)
         while not rospy.is_shutdown():
             # Time update
@@ -114,20 +126,23 @@ class UKFNode():
                 self.measurement_update(Z, z, R, sigma_points)
                 self.odometry_available = False
 
-            if self.gnss_pose_available:
-                [Z, z, R] = self.gnss_pose_model(sigma_points)
-                self.measurement_update(Z, z, R, sigma_points)
-                self.gnss_pose_available = False
-
-            if self.gnss_twist_available:
-                [Z, z, R] = self.gnss_twist_model(sigma_points)
-                self.measurement_update(Z, z, R, sigma_points)
-                self.gnss_twist_available = False
-
-            if self.cones_available:
-                [Z, z, R] = self.cones_model(sigma_points)
-                self.measurement_update(Z, z, R, sigma_points)
-                self.cones_available = False
+            # if self.gnss_pose_available:
+            #     print("Gnss pose update")
+            #     [Z, z, R] = self.gnss_pose_model(sigma_points)
+            #     self.measurement_update(Z, z, R, sigma_points)
+            #     self.gnss_pose_available = False
+            #
+            # if self.gnss_twist_available:
+            #     print("Gnss twist update")
+            #     [Z, z, R] = self.gnss_twist_model(sigma_points)
+            #     self.measurement_update(Z, z, R, sigma_points)
+            #     self.gnss_twist_available = False
+            #
+            # if self.cones_available:
+            #     print("Cones update")
+            #     [Z, z, R] = self.cones_model(sigma_points)
+            #     self.measurement_update(Z, z, R, sigma_points)
+            #     self.cones_available = False
 
             # Publish odometry output
             self.publish_output()
@@ -164,7 +179,7 @@ class UKFNode():
             sigma_points[i][2] += omega * self.dt
             sigma_points[i][3] += a_x * self.dt
             sigma_points[i][4] += a_y * self.dt
-            sigma_points[i][5] += self.omega_decay*omega + (1-self.omega_decay)*omega_imu
+            sigma_points[i][5] = self.omega_decay*omega + (1-self.omega_decay)*omega_imu
 
         return sigma_points
 
@@ -190,14 +205,14 @@ class UKFNode():
             diff = np.matrix(Z[i]-z_hat).transpose()  # column vector
             S += self.w_c[i] * np.matmul(diff, diff.transpose())
 
-        self.covariance = np.array([0.0]*(self.n**2)).reshape(self.n, self.n)
+        covariance_z = np.array([0.0]*(self.n**2)).reshape(self.n, self.n)  # not a proper symetrical covariance matrix
         for i in range(2*self.n+1):
-            self.covariance += self.w_c[i] * np.matmul(
-                                                    sigma_points[i]-self.mu,
-                                                    np.matrix(Z[i]-z_hat).transpose()
+            covariance_z += self.w_c[i] * np.matmul(
+                                                    np.matrix(sigma_points[i]-self.mu).transpose(),
+                                                    np.matrix(Z[i]-z_hat)
                                                     )
 
-        K = self.covariance * np.linalg.inv(S)
+        K = np.matmul(covariance_z, np.linalg.inv(S))
 
         # Updating the estimate
         self.mu += np.dot(K, z-z_hat)
@@ -325,6 +340,49 @@ class UKFNode():
         self.cones_available = True
 
 
+    def init_topic_callback(self, msg):
+        """ Callback for the initialisation topic
+            Initialise the state with an odometry topic
+        """
+
+        if self.mu is None:
+            self.mu = np.array([0.0]*6)
+
+            self.mu[0] = msg.pose.pose.position.x
+            self.mu[1] = msg.pose.pose.position.y
+
+            orientation = msg.pose.pose.orientation
+            self.mu[2] = tf.transformations.euler_from_quaternion([
+                                                            orientation.x,
+                                                            orientation.y,
+                                                            orientation.z,
+                                                            orientation.w
+                                                            ])[2]
+            # self.mu[3] = msg.twist.twist.linear.x
+            # self.mu[4] = msg.twist.twist.linear.y
+            # self.mu[5] = msg.twist.twist.angular.z
+
+            # Unsubscribe to the topic
+            self.sub_init_topic.unregister()
+
+
+    def initialise_cov_matrix(self, n, diag_value):
+        """ Create a n by n covariance matrix
+
+            Arguments:
+                - n: dimension of the covariance matrix
+                - diag_value: diagonal terms
+            Returns:
+                - a n by n numpy array
+        """
+
+        M = np.array([0.0]*(n**2)).reshape(n, n)
+        for k in range(n):
+            M[k][k] = diag_value
+
+        return M
+
+
     def publish_output(self):
         """ Build odometry output and publish it
         """
@@ -355,24 +413,9 @@ class UKFNode():
         msg.twist.covariance[7] = self.covariance[4][4]
         msg.twist.covariance[35] = self.covariance[5][5]
 
+
+        print("-----*--*-*-*")
         self.output_publisher.publish(msg)
-
-
-    def initialise_cov_matrix(self, n, diag_value):
-        """ Create a n by n covariance matrix
-
-            Arguments:
-                - n: dimension of the covariance matrix
-                - diag_value: diagonal terms
-            Returns:
-                - a n by n numpy array
-        """
-
-        M = np.array([0.0]*(n**2)).reshape(n, n)
-        for k in range(n):
-            M[k][k] = diag_value
-
-        return M
 
 
     def print_sigma_points(self, sigma_points):

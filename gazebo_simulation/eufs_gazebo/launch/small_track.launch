@@ -6,7 +6,7 @@
   <env name="GAZEBO_RESOURCE_PATH" value="$(find eufs_description)"/>
   <arg name="namespace" default="eufs"/>
   <arg name="debug" default="false"/>
-  <arg name="gui" default="false"/>
+  <arg name="gui" default="true"/>
   <arg name="cmd_timeout" default="0.5"/>
 
   <!-- Vehicle pose -->
@@ -50,7 +50,7 @@
   <!-- Publish noised odometry -->
   <node name="odometry_publisher" type="odometry_publisher.py" pkg="eufs_gazebo" ns="odom" output="screen">
     <remap from="odom" to="/odom" />
-    <remap from="gazebo_links" to="/gazebo/link_states" />
+    <remap from="input" to="/gazebo/odom" />
   </node>
 
   <!-- FIXME: to move -->

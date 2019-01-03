@@ -44,6 +44,8 @@ catkin build
 - Investigate why odometry update updates pose
 
 ## Changelog
+- 2019.01.03:
+  - UKF odometry update working
 - 2018.12.27:
   - UKF prediction phase working
 - 2018.12.10:
