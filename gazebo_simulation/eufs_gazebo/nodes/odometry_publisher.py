@@ -13,12 +13,12 @@ import roslib
 import rospy
 import tf
 import tf2_ros as tf2
+from std_srvs.srv import Empty, EmptyResponse
 from std_msgs.msg import Header
-from geometry_msgs.msg import TransformStamped
-import dynamic_reconfigure.server
-from geometry_msgs.msg import Quaternion
+from geometry_msgs.msg import TransformStamped, Quaternion
 from nav_msgs.msg import Odometry
 from gazebo_msgs.msg import LinkStates
+import dynamic_reconfigure.server
 from eufs_gazebo.cfg import odometryPublisherConfig
 
 
@@ -45,9 +45,6 @@ class OdometryPublisherNode():
         self.tf_broadcaster = tf2.TransformBroadcaster()
 
         # Init variables
-        self.publish_delay = 1 / float(self.publish_frequency)
-        self.last_v_x = 0.0
-        self.last_v_y = 0.0
         self.last_input_odom = None
         self.last_noised_odom = None
 
@@ -60,6 +57,17 @@ class OdometryPublisherNode():
 
         # Dynamic reconfigure
         self.configServer = dynamic_reconfigure.server.Server(odometryPublisherConfig, self.dynamicReconfigure_callback)
+
+        # ROS services
+        rospy.Service('reset', Empty, self.reset_callback)
+
+
+    def reset_callback(self, req):
+        """ Service callback for reseting the noised odometry
+        """
+
+        self.last_input_odom = None
+        return EmptyResponse()
 
 
     def input_callback(self, msg):
@@ -122,7 +130,7 @@ class OdometryPublisherNode():
             d_rot2 += gauss(sigma_d_rot2, 0.5*sigma_d_rot2)
             d_trans += gauss(sigma_d_trans, 0.5*sigma_d_trans)
 
-            rospy.loginfo("e_x={:.3} ; e_y={:.3} ; e_theta={:.3}".format(
+            rospy.logdebug("e_x={:.3} ; e_y={:.3} ; e_theta={:.3}".format(
                 self.last_input_odom.pose.pose.position.x - self.last_noised_odom.pose.pose.position.x,
                 self.last_input_odom.pose.pose.position.y - self.last_noised_odom.pose.pose.position.y,
                 self.compute_angle_difference(
