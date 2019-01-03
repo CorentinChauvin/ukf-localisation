@@ -33,6 +33,8 @@ class UKFNode():
         self.frame_id = rospy.get_param('~frame_id', '')
         self.child_frame_id = rospy.get_param('~child_frame_id', '')
         init_with_topic = rospy.get_param('~init_with_topic', False)
+        gnss_init_time = rospy.get_param('~gnss_init_time', 0.0)
+        self.std_position_gnss = rospy.get_param('~std_position_gnss', 0.0)
 
         # Init variables
         self.odometry_available = False
@@ -47,12 +49,14 @@ class UKFNode():
         self.last_gnss_twist_msg = None
         self.last_cones_msg = None
 
+        self.is_gnss_initialised = None
+
         self.dt = 1/float(self.update_frequency)
         self.min_cov_value = 10.0**-15  # minimal diagonal covariance value
 
         # Initialise tf2
-        self.tf_buffer = tf2.Buffer()
-        self.tf_listener = tf2.TransformListener(self.tf_buffer)
+        # self.tf_buffer = tf2.Buffer()
+        # self.tf_listener = tf2.TransformListener(self.tf_buffer)  # FIXME: remove?
 
         # ROS publishers
         self.output_publisher = rospy.Publisher('output', Odometry, queue_size=1)
@@ -70,7 +74,7 @@ class UKFNode():
         # Dynamic reconfigure
         # self.configServer = dynamic_reconfigure.server.Server(conesPerceptionConfig, self.dynamicReconfigure_callback)  # TODO
 
-        # UKF initialisation
+        # UKF state initialisation
         if init_with_topic:
             rospy.logdebug("Waiting for initialisation...")
             while self.mu is None:
@@ -80,6 +84,19 @@ class UKFNode():
             self.mu = np.array(init_state)
         self.n = len(self.mu)
 
+        # GNSS pose offsets estimation
+        self.gnss_offset_x = 0.0
+        self.gnss_offset_y = 0.0
+        self.gnss_init_counter = 0
+        self.is_gnss_initialised = False
+        rospy.loginfo("Initialise GNSS offsets...")
+        rospy.sleep(gnss_init_time)
+        self.gnss_offset_x = self.gnss_offset_x/self.gnss_init_counter - self.mu[0]
+        self.gnss_offset_y = self.gnss_offset_y/self.gnss_init_counter - self.mu[1]
+        self.is_gnss_initialised = True
+        rospy.loginfo("GNSS initialised")
+
+        # Initialise UKF other parameters
         self.covariance = np.array(init_covariance).reshape(self.n, self.n)
         self.ko = self.alpha**2 * (self.n + self.gamma) - self.n
         self.eta = sqrt(self.n + self.ko)
@@ -126,12 +143,15 @@ class UKFNode():
                 self.measurement_update(Z, z, R, sigma_points)
                 self.odometry_available = False
 
-            # if self.gnss_pose_available:
-            #     print("Gnss pose update")
-            #     [Z, z, R] = self.gnss_pose_model(sigma_points)
-            #     self.measurement_update(Z, z, R, sigma_points)
-            #     self.gnss_pose_available = False
-            #
+            if self.gnss_pose_available:
+                # print("mu_x={:.3f} ; mu_y={:.3f}".format(self.mu[0], self.mu[1]))
+                # print("gn_x={:.3f} ; gn_y={:.3f}".format(
+                #                     self.last_gnss_pose_msg.pose.pose.position.x,
+                #                     self.last_gnss_pose_msg.pose.pose.position.y))
+                [Z, z, R] = self.gnss_pose_model(sigma_points)
+                self.measurement_update(Z, z, R, sigma_points)
+                self.gnss_pose_available = False
+
             # if self.gnss_twist_available:
             #     print("Gnss twist update")
             #     [Z, z, R] = self.gnss_twist_model(sigma_points)
@@ -276,8 +296,12 @@ class UKFNode():
 
         # Build the measurement noise matrix
         R = self.initialise_cov_matrix(self.n, self.min_cov_value)
-        R[0][0] = max(self.last_gnss_pose_msg.pose.covariance[0], self.min_cov_value)
-        R[1][1] = max(self.last_gnss_pose_msg.pose.covariance[7], self.min_cov_value)
+        if self.std_position_gnss >= self.min_cov_value:
+            R[0][0] = self.std_position_gnss**2
+            R[1][1] = self.std_position_gnss**2
+        else:
+            R[0][0] = max(self.last_gnss_pose_msg.pose.covariance[0], self.min_cov_value)
+            R[1][1] = max(self.last_gnss_pose_msg.pose.covariance[7], self.min_cov_value)
 
         return [Z, z, R]
 
@@ -326,13 +350,24 @@ class UKFNode():
 
 
     def gnss_pose_callback(self, msg):
-        self.last_gnss_pose_msg = msg
-        self.gnss_pose_available = msg
+        if self.is_gnss_initialised is None:
+            return  # to early to start the initialisation
+        elif not self.is_gnss_initialised:
+            # Average the initial position
+            self.gnss_offset_x += msg.pose.pose.position.x
+            self.gnss_offset_y += msg.pose.pose.position.y
+            self.gnss_init_counter += 1
+        else:
+            # Remove the offset and release the message
+            self.last_gnss_pose_msg = msg
+            self.last_gnss_pose_msg.pose.pose.position.x -= self.gnss_offset_x
+            self.last_gnss_pose_msg.pose.pose.position.y -= self.gnss_offset_y
+            self.gnss_pose_available = True
 
 
     def gnss_twist_callback(self, msg):
         self.last_gnss_twist_msg = msg
-        self.gnss_twist_available = msg
+        self.gnss_twist_available = True
 
 
     def cones_callback(self, msg):

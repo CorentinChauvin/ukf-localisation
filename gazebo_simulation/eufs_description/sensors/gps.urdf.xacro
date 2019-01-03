@@ -48,7 +48,7 @@
                 <referenceLatitude>59.35115</referenceLatitude>
                 <referenceLongitude>18.07042</referenceLongitude>
                 <!-- To set heading in ENU orientation (degrees) -->
-                <referenceHeading>0</referenceHeading>
+                <referenceHeading>90</referenceHeading>
                 <velocityTopicName>/gps/velocity</velocityTopicName>
                 <drift>0.0 0.0 0.0</drift>
                 <gaussianNoise>2.5 2.5 3.0</gaussianNoise>

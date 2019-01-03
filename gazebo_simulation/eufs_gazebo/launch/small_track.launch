@@ -56,7 +56,7 @@
   <!-- FIXME: to move -->
   <group ns="gps">
     <!-- Conversion of GPS coordinates -->
-    <arg name="init_samples_number" value="5" />
+    <arg name="init_samples_number" value="10" />
     <node name="set_gps_reference" type="set_gps_reference_node" pkg="geodetic_utils" args="$(arg init_samples_number)" output="screen">
       <remap from="gps" to="fix" />
     </node>
