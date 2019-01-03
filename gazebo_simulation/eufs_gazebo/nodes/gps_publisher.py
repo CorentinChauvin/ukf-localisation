@@ -46,10 +46,11 @@ class GpsPublisherNode():
                 pose_msg.pose.covariance[7] = self.std_position**2
                 self.pose_publisher.publish(pose_msg)
 
-                # Twist message
+                # Twist message (the twist is not in the same frame in hector_gazebo plugin)(why??)
                 twist_msg = TwistWithCovarianceStamped()
                 twist_msg.header = self.last_velocity.header
-                twist_msg.twist.twist.linear = self.last_velocity.vector
+                twist_msg.twist.twist.linear.x = -self.last_velocity.vector.y
+                twist_msg.twist.twist.linear.y = self.last_velocity.vector.x
                 twist_msg.twist.covariance[0] = self.std_velocity**2
                 twist_msg.twist.covariance[7] = self.std_velocity**2
                 self.twist_publisher.publish(twist_msg)

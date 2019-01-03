@@ -25,7 +25,8 @@ ukf:
                                0.0, 0.0, 0.0, 0.0, 0.0, 0.001]
     init_with_topic: true
     gnss_init_time: 1.0
-    std_position_gnss: 7.5  # if 0.0, use the covariance in the pose message
+    std_position_gnss: 2.5  # if 0.0, use the covariance in the pose message
+    min_gnss_speed: 1.0
 
   diff_odom_publisher:
     publish_frequency: 10.0

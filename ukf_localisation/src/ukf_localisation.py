@@ -3,7 +3,7 @@
     ddf
 """
 
-from math import sqrt, sin, cos, atan2
+from math import sqrt, sin, cos, atan2, pi
 import numpy as np
 from copy import deepcopy
 from scipy.linalg import sqrtm
@@ -35,6 +35,7 @@ class UKFNode():
         init_with_topic = rospy.get_param('~init_with_topic', False)
         gnss_init_time = rospy.get_param('~gnss_init_time', 0.0)
         self.std_position_gnss = rospy.get_param('~std_position_gnss', 0.0)
+        min_gnss_speed = rospy.get_param('~min_gnss_speed', 0.0)
 
         # Init variables
         self.odometry_available = False
@@ -144,20 +145,20 @@ class UKFNode():
                 self.odometry_available = False
 
             if self.gnss_pose_available:
-                # print("mu_x={:.3f} ; mu_y={:.3f}".format(self.mu[0], self.mu[1]))
-                # print("gn_x={:.3f} ; gn_y={:.3f}".format(
-                #                     self.last_gnss_pose_msg.pose.pose.position.x,
-                #                     self.last_gnss_pose_msg.pose.pose.position.y))
                 [Z, z, R] = self.gnss_pose_model(sigma_points)
                 self.measurement_update(Z, z, R, sigma_points)
                 self.gnss_pose_available = False
 
-            # if self.gnss_twist_available:
-            #     print("Gnss twist update")
-            #     [Z, z, R] = self.gnss_twist_model(sigma_points)
-            #     self.measurement_update(Z, z, R, sigma_points)
-            #     self.gnss_twist_available = False
-            #
+            if self.gnss_twist_available:
+                v_x = self.last_gnss_twist_msg.twist.twist.linear.x
+                v_y = self.last_gnss_twist_msg.twist.twist.linear.y
+                v = sqrt(v_x**2 + v_y**2)
+
+                if v >= min_gnss_speed:
+                    [Z, z, R] = self.gnss_twist_model(sigma_points)
+                    self.measurement_update(Z, z, R, sigma_points)
+                    self.gnss_twist_available = False
+
             # if self.cones_available:
             #     print("Cones update")
             #     [Z, z, R] = self.cones_model(sigma_points)
@@ -223,19 +224,24 @@ class UKFNode():
         S = R
         for i in range(2*self.n+1):
             diff = np.matrix(Z[i]-z_hat).transpose()  # column vector
+            diff[2, 0] = self.modulo_2pi(diff[2, 0])
             S += self.w_c[i] * np.matmul(diff, diff.transpose())
 
         covariance_z = np.array([0.0]*(self.n**2)).reshape(self.n, self.n)  # not a proper symetrical covariance matrix
         for i in range(2*self.n+1):
+            diff = np.matrix(Z[i]-z_hat)
+            diff[0, 2] = self.modulo_2pi(diff[0, 2])
             covariance_z += self.w_c[i] * np.matmul(
                                                     np.matrix(sigma_points[i]-self.mu).transpose(),
-                                                    np.matrix(Z[i]-z_hat)
+                                                    diff
                                                     )
 
         K = np.matmul(covariance_z, np.linalg.inv(S))
 
         # Updating the estimate
-        self.mu += np.dot(K, z-z_hat)
+        diff = z-z_hat
+        diff[2] = self.modulo_2pi(diff[2])
+        self.mu += np.dot(K, diff)
         self.covariance -= K.dot(S).dot(K.transpose())
 
 
@@ -308,6 +314,7 @@ class UKFNode():
 
     def gnss_twist_model(self, sigma_points):
         """ Provide the gnss twist measurement model for all the sigma points
+            Fuse the GNSS speed only above a minimum speed
 
             Argument:
                 - sigma_points: the sigma points
@@ -317,22 +324,30 @@ class UKFNode():
                 - R: measurement noise matrix
         """
 
+        v_x = self.last_gnss_twist_msg.twist.twist.linear.x
+        v_y = self.last_gnss_twist_msg.twist.twist.linear.y
+        v = sqrt(v_x**2 + v_y**2)
+        track = atan2(v_y, v_x)
+        (v_x, v_y) = (cos(track)*v_x + sin(track)*v_y,
+                      -sin(track)*v_x + cos(track)*v_y)
+
         # Project measurement for all the sigma points
         Z = [0.0]*(2*self.n+1)
         for i in range(2*self.n+1):
-            Z[i] = np.array([sigma_points[i][0], sigma_points[i][1], 0.0,
-                             0.0, 0.0, 0.0])
+            Z[i] = np.array([0.0, 0.0, sigma_points[i][2], sigma_points[i][3],
+                             sigma_points[i][4], 0.0])
 
         # Provide real measurement
-        v_x = self.last_gnss_twist_msg.twist.twist.linear.x
-        v_y = self.last_gnss_twist_msg.twist.twist.linear.y
-        z = np.array([0.0, 0.0, atan2(v_y, v_x), v_x, v_y, 0.0])
+        z = np.array([0.0, 0.0, track, v_x, v_y, 0.0])
 
         # Build the measurement noise matrix
         sigma_v_x = sqrt(self.last_gnss_twist_msg.twist.covariance[0])
         sigma_v_y = sqrt(self.last_gnss_twist_msg.twist.covariance[7])
         R = self.initialise_cov_matrix(self.n, self.min_cov_value)
-        R[2][2] = max(((v_x*sigma_v_y)**2 + (v_y*sigma_v_x)**2) / (v_x**2 + v_y**2), self.min_cov_value)
+        R[2][2] = max(
+            ((v_x*sigma_v_y)**2 + (v_y*sigma_v_x)**2) / (v_x**2 + v_y**2),
+            self.min_cov_value)
+        # TODO: project along the track (useless if sigma_v_x=sigma_v_y)
         R[3][3] = max(sigma_v_x**2, self.min_cov_value)
         R[4][4] = max(sigma_v_y**2, self.min_cov_value)
 
@@ -460,6 +475,19 @@ class UKFNode():
         n = len(sigma_points)
         for i in range(n):
             print("sigma_points[{}]: {}".format(i, sigma_points[i]))
+
+
+    def modulo_2pi(self, angle):
+        """ Bring an angle in [-pi, pi]
+        """
+
+        while (angle > pi) or (angle < -pi):
+            if angle > pi:
+                angle -= 2*pi
+            else:
+                angle += 2*pi
+
+        return angle
 
 
     # def dynamicReconfigure_callback(self, config, level):
