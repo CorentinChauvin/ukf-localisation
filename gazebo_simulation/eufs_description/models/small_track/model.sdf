@@ -1,6 +1,10 @@
 <?xml version='1.0'?>
 <sdf version='1.6'>
   <model name='small_track'>
+    <gazebo>
+      <static>true</static>
+    </gazebo>
+
     <link name='cone_blue_0'>
       <pose frame=''>-17.0129 9.72719 0.079001 0 -0 0</pose>
       <collision name="collision">

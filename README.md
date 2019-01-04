@@ -44,6 +44,8 @@ catkin build
 - Investigate why odometry update updates pose
 
 ## Changelog
+- 2019.01.04:
+  - UKF cones update working
 - 2019.01.03:
   - UKF odometry update working
   - UKF GNSS update working

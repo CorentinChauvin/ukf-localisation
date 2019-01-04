@@ -1,16 +1,18 @@
 ukf:
   ukf_localisation:
-    update_frequency: 10.0
+    update_frequency: 50.0
     frame_id: 'odom'
     child_frame_id: 'base_footprint'
+    cones_sensor_frame: 'velodyne'
 
     alpha: 0.1
     beta: 2.0
     gamma: 0.0
-    omega_decay: 0.8  # 0.0: only IMU ; 1.0: only odometry
+    omega_decay: 0.3  # 0.0: only IMU ; 1.0: only odometry
 
     # State: x, y, theta, v_x, v_y, omega
-    init_state: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    init_with_topic: true
+    init_state: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]  # only if init_with_topic=false
     init_covariance: [0.1, 0.0, 0.0, 0.0, 0.0, 0.0,
                       0.0, 0.1, 0.0, 0.0, 0.0, 0.0,
                       0.0, 0.0, 0.1, 0.0, 0.0, 0.0,
@@ -23,10 +25,17 @@ ukf:
                                0.0, 0.0, 0.0, 0.001, 0.0, 0.0,
                                0.0, 0.0, 0.0, 0.0, 0.001, 0.0,
                                0.0, 0.0, 0.0, 0.0, 0.0, 0.001]
-    init_with_topic: true
-    gnss_init_time: 1.0
-    std_position_gnss: 2.5  # if 0.0, use the covariance in the pose message
-    min_gnss_speed: 1.0
+    gnss_init_time: 2.0      # time to average initial GNSS position
+    std_position_cones: 2.0  # if 0.0, use the covariance in the cones message
+    std_position_gnss: 0.0   # if 0.0, use the covariance in the pose message
+    min_gnss_speed: 1.0      # min speed to fuse GNSS speed
+
+    fuse_odometry: true
+    fuse_gnss_position: true
+    fuse_gnss_speed: true
+    fuse_cones: true
+
+
 
   diff_odom_publisher:
     publish_frequency: 10.0

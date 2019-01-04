@@ -8,7 +8,8 @@
       <remap from="imu" to="/imu_centered" />
       <remap from="gnss_pose" to="/gps/pose" />
       <remap from="gnss_twist" to="/gps/twist" />
-      <remap from="cones" to="/perception/detected" />
+      <remap from="cones" to="/perception/cones_detected" />
+      <remap from="cones_absolute" to="/perception/cones_detected_absolute" />
       <remap from="init_topic" to="/odom/ground_truth" />
     </node>
 

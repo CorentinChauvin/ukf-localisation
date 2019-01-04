@@ -26,6 +26,7 @@ perception:
     std_position: 0.03            # 0.03 for the velodyne
     std_position_linear: 0.0      # 0.0 for the velodyne and the camera
     std_position_quadratic: 0.0   # ? for the camera
+    noise_measurement: true
     range: 10.0
     absolute_frame: 'world'  # FIXME: not used anymore
     sensor_frame: 'velodyne'

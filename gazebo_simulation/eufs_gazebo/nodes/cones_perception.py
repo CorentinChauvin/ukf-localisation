@@ -27,6 +27,7 @@ class ConesPerceptionNode():
         self.std_position = rospy.get_param('~std_position', 0.0)                       # Constant factor in the standard deviation
         self.std_position_linear = rospy.get_param('~std_position_linear', 0.0)         # Linear factor in the standard deviation
         self.std_position_quadratic = rospy.get_param('~std_position_quadratic', 0.0)   # Quadratic factor in the standard deviation
+        self.noise_measurement = rospy.get_param('~noise_measurement', True)
         self.range = rospy.get_param('~range', 0.0)  # Range of the sensor
         self.sensor_frame = rospy.get_param('~sensor_frame', '')
         self.absolute_frame = rospy.get_param('~absolute_frame', '')
@@ -40,6 +41,7 @@ class ConesPerceptionNode():
         self.distance_sensor = None
         self.last_sensor_transform = None  # Transform world->sensor (matrix)
         self.last_gazebo_message = None
+        self.last_car_pose = None
 
         # Initialise tf2
         self.tf_buffer = tf2.Buffer()
@@ -52,6 +54,7 @@ class ConesPerceptionNode():
 
         # ROS subscribers
         rospy.Subscriber('gazebo_links', LinkStates, self.gazebo_callback)
+        rospy.Subscriber('odom_car', Odometry, self.odom_car_callback)
 
         # Dynamic reconfigure
         self.configServer = dynamic_reconfigure.server.Server(conesPerceptionConfig, self.dynamicReconfigure_callback)
@@ -65,13 +68,14 @@ class ConesPerceptionNode():
 
             if self.cones_list != [] and self.last_sensor_transform is not None:
                 detected_cones = Cones()
-                detected_cones.header.stamp = rospy.get_rostime()
+                stamp = rospy.get_rostime()
+                detected_cones.header.stamp = stamp
                 detected_cones.header.frame_id = self.sensor_frame
                 detected_cones_absolute = Cones()  # Real position of the detected cones in the absolute frame for data association
-                detected_cones.header.stamp = rospy.get_rostime()
-                detected_cones.header.frame_id = self.sensor_frame
+                detected_cones_absolute.header.stamp = stamp
+                detected_cones_absolute.header.frame_id = self.sensor_frame
                 undetected_cones = Cones()
-                undetected_cones.header.stamp = rospy.get_rostime()
+                undetected_cones.header.stamp = stamp
                 undetected_cones.header.frame_id = self.sensor_frame
 
                 for cone in self.cones_list:
@@ -100,8 +104,9 @@ class ConesPerceptionNode():
                         cone_transformed.covariance[2] = std_deviation**2
 
                         # Noise the position
-                        cone_transformed.x += numpy.random.normal(0.0, std_deviation)
-                        cone_transformed.y += numpy.random.normal(0.0, std_deviation)
+                        if self.noise_measurement:
+                            cone_transformed.x += numpy.random.normal(0.0, std_deviation)
+                            cone_transformed.y += numpy.random.normal(0.0, std_deviation)
 
                         detected_cones.cones.append(cone_transformed)
 
@@ -126,6 +131,13 @@ class ConesPerceptionNode():
                 self.cones_undetected_publisher.publish(undetected_cones)
 
             self.rate.sleep()
+
+
+    def odom_car_callback(self, msg):
+        """ Callback for the odometry message giving the pose of the car
+        """
+
+        self.last_car_pose = msg.pose.pose
 
 
     def gazebo_callback(self, msg):
@@ -153,36 +165,36 @@ class ConesPerceptionNode():
             except (tf2.LookupException, tf2.ConnectivityException, tf2.ExtrapolationException):
                 return
 
-        # Compute the transform world->sensor
-        n = len(msg.name)
-        for k in range(n):
-            if 'base_footprint' in msg.name[k]:
-                # Get the world->base_footprint transform
-                base_pose = msg.pose[k]
-                trans_mat = tf.transformations.translation_matrix([
-                                    base_pose.position.x,
-                                    base_pose.position.y,
-                                    0.0
-                                ])
-                rot_mat = tf.transformations.quaternion_matrix([
-                                    base_pose.orientation.x,
-                                    base_pose.orientation.y,
-                                    base_pose.orientation.z,
-                                    base_pose.orientation.w,
-                                ])
-                # transform1 = numpy.dot(trans_mat, tf.transformations.inverse_matrix(rot_mat))
-                transform1 = numpy.dot(trans_mat, rot_mat)
+        # Get the world->base_footprint transform
+        if self.last_car_pose is None:
+            return
 
-                # Compute the world->sensor transform
-                transform2 = tf.transformations.translation_matrix([
-                                    self.distance_sensor,
-                                    0.0,
-                                    0.0
-                                ])
-                self.last_sensor_transform = numpy.dot(transform1, transform2)
+        base_pose = self.last_car_pose
+        trans_mat = tf.transformations.translation_matrix([
+                            base_pose.position.x,
+                            base_pose.position.y,
+                            0.0
+                        ])
+        rot_mat = tf.transformations.quaternion_matrix([
+                            base_pose.orientation.x,
+                            base_pose.orientation.y,
+                            base_pose.orientation.z,
+                            base_pose.orientation.w,
+                        ])
+        # transform1 = numpy.dot(trans_mat, tf.transformations.inverse_matrix(rot_mat))
+        transform1 = numpy.dot(trans_mat, rot_mat)
+
+        # Compute the world->sensor transform
+        transform2 = tf.transformations.translation_matrix([
+                            self.distance_sensor,
+                            0.0,
+                            0.0
+                        ])
+        self.last_sensor_transform = numpy.dot(transform1, transform2)
 
         # Get the cones (in the world frame)
         if self.cones_list == []:
+            n = len(msg.name)
             for k in range(n):
                 name = msg.name[k]
                 if 'cone' in name:
@@ -209,6 +221,7 @@ class ConesPerceptionNode():
         self.std_position = config['std_position']
         self.std_position_linear = config['std_position_linear']
         self.std_position_quadratic = config['std_position_quadratic']
+        self.noise_measurement = config['noise_measurement']
         self.range = config['range']
         self.range_squared = self.range**2
         self.publish_frequency = config['publish_frequency']
