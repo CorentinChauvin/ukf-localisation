@@ -47,6 +47,8 @@ class UKFNode():
         fuse_gnss_position = rospy.get_param('~fuse_gnss_position', True)
         fuse_gnss_speed = rospy.get_param('~fuse_gnss_speed', True)
         fuse_cones = rospy.get_param('~fuse_cones', True)
+        self.use_lateral_speed = rospy.get_param('~use_lateral_speed', True)
+
 
         # Init variables
         self.odometry_available = False
@@ -245,14 +247,20 @@ class UKFNode():
             y = sigma_points[i][1]
             theta = sigma_points[i][2]
             v_x = sigma_points[i][3]
-            v_y = sigma_points[i][4]
+            if self.use_lateral_speed:
+                v_y = sigma_points[i][4]
+            else:
+                v_y = 0.0
             omega = sigma_points[i][5]
 
-            sigma_points[i][0] += v_x * cos(theta) * self.dt
-            sigma_points[i][1] += v_x * sin(theta) * self.dt
+            sigma_points[i][0] += (v_x*cos(theta) - v_y*sin(theta)) * self.dt
+            sigma_points[i][1] += (v_x*sin(theta) + v_y*cos(theta)) * self.dt
             sigma_points[i][2] += omega * self.dt
             sigma_points[i][3] += a_x * self.dt
-            sigma_points[i][4] += a_y * self.dt
+            if self.use_lateral_speed:
+                sigma_points[i][4] += a_y * self.dt
+            else:
+                sigma_points[i][4] = 0.0
             sigma_points[i][5] = self.omega_decay*omega + (1-self.omega_decay)*omega_imu
 
         return sigma_points

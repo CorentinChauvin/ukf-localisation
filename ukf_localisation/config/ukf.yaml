@@ -34,6 +34,7 @@ ukf:
     fuse_gnss_position: true
     fuse_gnss_speed: true
     fuse_cones: true
+    use_lateral_speed: true  # if false, v_y is set to 0
 
 
 

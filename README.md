@@ -4,7 +4,7 @@ Description
 
 ## Install
 
-Required packages:
+Working with Ubuntu 16.04 and ROS Kinetic. Required packages:
 * ros-kinetic-ackermann-msgs
 * ros-kinetic-twist-mux
 * ros-kinetic-joy
@@ -37,11 +37,11 @@ catkin build
 ## Run the project
 - To launch the simulation: `roslaunch eufs_gazebo small_track.launch`
 - To control the car: `roslaunch robot_control keyboard_robot_control.launch`
+- To launch the UKF: `git add ukf_localisation/src/ukf_localisation.py`
 
 ## TODO
 - Investigate offsets in noised odometry position
-- Disable each measurement update through dynamic reconfigure
-- Investigate why odometry update updates pose
+- Dynamic reconfiguration of the parameters
 
 ## Changelog
 - 2019.01.04:
