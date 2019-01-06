@@ -1,6 +1,11 @@
-# Applied Estimation project
+# UKF Localisation of a Formula Student Car
 
-Description
+This contains a Gazebo simulation of the car of the KTH Formula Student team, and the implementation of an Unscented Kalman Filter estimating the pose and the twist of the car.
+
+![simulation](REPORT/images/gazebo_simulation.png)
+
+The Gazebo simulation is highly based on the code of the Formula Student team of Edinburgh
+(sources on GitHub: https://github.com/eufsa/eufs_sim).
 
 ## Install
 
@@ -38,6 +43,10 @@ catkin build
 - To launch the simulation: `roslaunch eufs_gazebo small_track.launch`
 - To control the car: `roslaunch robot_control keyboard_robot_control.launch`
 - To launch the UKF: `git add ukf_localisation/src/ukf_localisation.py`
+
+## Tuning
+- The parameters for the simulation can be found in `gazebo_simulation/eufs_gazebo/config/simulation.yaml`
+- The parameters for the UKF can be found in `ukf_localisation/config/ukf.yaml`
 
 ## TODO
 - Investigate offsets in noised odometry position
