@@ -39,6 +39,7 @@ class UKFNode():
         init_covariance = rospy.get_param('~init_covariance', [0.0]*36)
         process_noise_covariance = rospy.get_param('~process_noise_covariance', [0.0]*36)
         gnss_init_time = rospy.get_param('~gnss_init_time', 0.0)
+        self.std_odom_factor = rospy.get_param('~std_odom_factor', 1.0)
         self.std_position_cones = rospy.get_param('~std_position_cones', 0.0)
         self.std_position_gnss = rospy.get_param('~std_position_gnss', 0.0)
         min_gnss_speed = rospy.get_param('~min_gnss_speed', 0.0)
@@ -338,8 +339,8 @@ class UKFNode():
 
         # Build the measurement noise matrix
         R = self.initialise_cov_matrix(self.n, 1/self.min_cov_value)
-        R[3][3] = max(self.last_odom_msg.twist.covariance[0], self.min_cov_value)
-        R[5][5] = max(self.last_odom_msg.twist.covariance[35], self.min_cov_value)
+        R[3][3] = max(self.std_odom_factor*self.last_odom_msg.twist.covariance[0], self.min_cov_value)
+        R[5][5] = max(self.std_odom_factor*self.last_odom_msg.twist.covariance[35], self.min_cov_value)
 
         return [Z, z, R]
 

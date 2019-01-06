@@ -8,7 +8,7 @@ ukf:
     alpha: 0.1
     beta: 2.0
     gamma: 0.0
-    omega_decay: 0.3  # 0.0: only IMU ; 1.0: only odometry
+    omega_decay: 0.8  # 0.0: only IMU ; 1.0: only odometry
 
     # State: x, y, theta, v_x, v_y, omega
     init_with_topic: true
@@ -26,7 +26,8 @@ ukf:
                                0.0, 0.0, 0.0, 0.0, 0.001, 0.0,
                                0.0, 0.0, 0.0, 0.0, 0.0, 0.001]
     gnss_init_time: 2.0      # time to average initial GNSS position
-    std_position_cones: 2.0  # if 0.0, use the covariance in the cones message
+    std_odom_factor: 1.0     # multiplicative factor for the odometry covariance
+    std_position_cones: 1.0  # if 0.0, use the covariance in the cones message
     std_position_gnss: 0.0   # if 0.0, use the covariance in the pose message
     min_gnss_speed: 1.0      # min speed to fuse GNSS speed
 
@@ -34,7 +35,7 @@ ukf:
     fuse_gnss_position: true
     fuse_gnss_speed: true
     fuse_cones: true
-    use_lateral_speed: true  # if false, v_y is set to 0
+    use_lateral_speed: false  # if false, v_y is set to 0
 
 
 
@@ -42,4 +43,5 @@ ukf:
     publish_frequency: 10.0
     frame_id: 'odom'
     child_frame_id: 'base_footprint'
-    verbose: false
+    display_diff: true
+    display_RMSE: true

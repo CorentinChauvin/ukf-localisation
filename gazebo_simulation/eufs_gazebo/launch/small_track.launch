@@ -98,4 +98,7 @@
     </node>
   </group>
 
+  <!-- Rviz visualisation -->
+  <node name="rviz" type="rviz" pkg="rviz" output="screen" args="-d $(find ukf_localisation)/rviz/ukf_localisation.rviz" />
+
 </launch>

@@ -18,5 +18,9 @@
       <remap from="odom2" to="/ukf/output" />
       <remap from="diff_odom" to="/ukf/diff" />
     </node>
+
+    <node name="distance_publisher" type="distance_publisher.py" pkg="ukf_localisation" output="screen">
+      <remap from="odom" to="/odom/ground_truth" />
+    </node>
   </group>
 </launch>
