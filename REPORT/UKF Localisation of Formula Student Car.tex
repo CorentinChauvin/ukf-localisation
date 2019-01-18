@@ -150,8 +150,8 @@ In the prediction phase, 13 \textit{sigma points} are generated around the state
 	\SetKwProg{predict}{predict(}{ ):}{}	
 	\predict{$\chi_{t-1}, u_t $}{
 		\ForEach{sigma point $(x_t^i, y_t^i, \theta_t^i, v_{x, t}^i, v_{y, t}^i, \omega_t^i)$}{
-			$x_{t+1}^i = (v_{x, t}^i \cos(\theta_t^i) - v_{y, t}^i \sin(\theta_t^i)) \delta_t$ \;
-			$y_{t+1}^i = (v_{x, t}^i \sin(\theta_t^i) + v_{y, t}^i \cos(\theta_t^i)) \delta_t$ \;
+			$x_{t+1}^i = x_{t}^i + (v_{x, t}^i \cos(\theta_t^i) - v_{y, t}^i \sin(\theta_t^i)) \delta_t$ \;
+			$y_{t+1}^i = y_{t}^i + (v_{x, t}^i \sin(\theta_t^i) + v_{y, t}^i \cos(\theta_t^i)) \delta_t$ \;
 			$\theta_{t+1}^i = \theta_t^i + \omega_t^i \delta_t$ \;
 			$v_{x, t+1}^i = v_{x, t}^i + u_t[a_x] \delta_t$ \;
 			$v_{y, t+1}^i = v_{x, t}^i + u_t[a_y] \delta_t$ \;
